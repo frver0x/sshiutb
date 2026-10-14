@@ -1354,7 +1354,7 @@ Host lab
 
 Pour chacune des questions, indiquer les fichiers modifiés, les
 configurations et commandes réalisées. Ne pas hésiter à utiliser
-\texttt{man\ sshd\_config} et \texttt{man\ ssh } et a fournir des captures d'écran.
+\texttt{man\ sshd\_config} et \texttt{man\ ssh }, et fournir des captures d'écran.
 
 \begin{questions}
 \question Modifier le port d'écoute de SSH du bastion sur 20222, puis tester la
@@ -1369,7 +1369,7 @@ principal, c'est qu'il y aura moins de
 tentatives de connexion donc moins de logs liés au flood. La mesure ne
 protège pas du bruteforce par exemple. En complément, il est possible
 d'autoriser uniquement l'authentification par clé ou un
-mécanisme comme Fail2ban}
+mécanisme comme Fail2ban.}
 
 Modifications à réaliser :
 
@@ -1508,7 +1508,7 @@ sudo systemctl reload ssh
 \end{bashcode}
 
 En bonus, il est possible de désactiver
-l'authentification interactive (+0.5)
+l'authentification interactive :
 
 \begin{bashcode}
 KbdInteractiveAuthentication no
