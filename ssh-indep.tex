@@ -363,6 +363,12 @@
 
 \graphicspath{{./images/}}
 
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{calc}
+\newcounter{none}
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
 
 \begin{document}
 \maketitle
@@ -1359,5 +1365,310 @@ Host lab
   \item l'option \texttt{PermitTunnel} de \texttt{sshd\_config} (tunnel TAP, pour du
         véritable VPN sur SSH) — à connaître, rarement à utiliser.
 \end{itemize}
+
+\section{12. Hardening SSH}\label{hardening-ssh}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsubsection{12.1. Préparation de
+l\textquotesingle environnement}\label{pruxe9paration-de-lenvironnement}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\begin{enumerate}
+\tightlist
+\item
+  Modifier les deux machines virtuelles "bastion" et "cible" pour
+  qu\textquotesingle elles soient bridgées et adressées sur la salle.
+\end{enumerate}
+
+\subsubsection{12.2. Hardening du bastion}\label{hardening-du-bastion}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+Pour chacune des questions, indiquer les fichiers modifiés, les
+configurations et commandes réalisées. Ne pas hésiter à utiliser
+\texttt{man\ sshd\_config} et \texttt{man\ ssh}.
+
+\begin{enumerate}
+\tightlist
+\item
+  Modifier le port d'écoute de SSH du bastion sur 20222, puis tester la
+  connexion depuis votre hôte. Quel est l'avantage de cette manipulation
+  si la machine est exposée sur internet (en DMZ par exemple) ? Quelle
+  en est la limite ?
+\end{enumerate}
+
+\emph{Réponse : Changer le port permet de réduire le bruit des bots qui
+scannent massivement le port 22 sur internet. L\textquotesingle avantage
+principal, c\textquotesingle est qu\textquotesingle il y aura moins de
+tentatives de connexion donc moins de logs liés au flood. La mesure ne
+protège pas du bruteforce par exemple. En complément, il est possible
+d\textquotesingle autoriser uniquement l'authentification par clé ou un
+mécanisme comme Fail2ban}
+
+Modifications à réaliser :
+
+\begin{verbatim}
+sudo -i
+nano /etc/ssh/sshd_config
+\end{verbatim}
+
+Remplacer :
+
+\begin{verbatim}
+# Port 22
+Port 20222
+\end{verbatim}
+
+Puis :
+
+\begin{verbatim}
+sudo systemctl restart ssh
+\end{verbatim}
+
+Depuis votre hôte, modifier l\textquotesingle alias du bastion :
+
+\begin{verbatim}
+  Host bastion
+      HostName 10.202.67.100
+      Port 20222
+\end{verbatim}
+
+Tester la connexion :
+
+\begin{verbatim}
+ssh -p 20222 test@10.202.67.100
+\end{verbatim}
+
+\begin{enumerate}
+\setcounter{enumi}{1}
+\tightlist
+\item
+  Modifier le fichier de configuration du démon SSH pour
+  n\textquotesingle autoriser la connexion qu\textquotesingle aux
+  utilisateurs "test" et "test2". Quelle serait la démarche pour refuser
+  la connexion à un groupe ?
+\end{enumerate}
+
+Afin d\textquotesingle autoriser la connexion qu\textquotesingle à
+l\textquotesingle utilisateur "test" et "test2", il faut ajouter la
+configuration suivante dans le fichier \texttt{/etc/ssh/sshd\_config} :
+
+\begin{verbatim}
+AllowUsers test test2
+\end{verbatim}
+
+Pour refuser un groupe, la directive est :
+
+\begin{verbatim}
+DenyGroups grp-exemple
+\end{verbatim}
+
+Puis :
+
+\begin{verbatim}
+systemctl restart ssh
+\end{verbatim}
+
+\begin{enumerate}
+\setcounter{enumi}{2}
+\tightlist
+\item
+  Que se passe-t-il si les directives AllowUsers et AllowGroups
+  coexistent dans le fichier de configuration sshd ? (Réaliser la
+  manipulation en créant le groupe "grp-adm" et
+  l\textquotesingle utilisateur "test2")
+\end{enumerate}
+
+Si les deux directives coexistent,
+
+\begin{verbatim}
+sudo -i
+adduser test2
+groupadd grp-adm
+usermod -aG grp-adm test2
+\end{verbatim}
+
+Modifier le fichier de configuration \texttt{/etc/ssh/sshd\_config} et
+ajouter :
+
+\begin{verbatim}
+AllowGroups grp-adm
+\end{verbatim}
+
+Depuis une autre machine, tester avec les deux utilisateurs la connexion
+:
+
+\begin{verbatim}
+ssh -p 20222 test@10.202.67.100 # refusée
+\end{verbatim}
+
+\begin{verbatim}
+ssh -p 20222 test2@10.202.67.100 # ok
+\end{verbatim}
+
+\begin{enumerate}
+\setcounter{enumi}{3}
+\tightlist
+\item
+  Générer une paire de clés SSH ed25519 pour
+  l\textquotesingle utilisateur test2 et ajouter la clé SSH publique de
+  test2 au bastion (\texttt{ssh-copy-id}). Modifier la configuration du
+  démon SSH pour n\textquotesingle autoriser que
+  l\textquotesingle authentification par clé et refuser
+  l\textquotesingle authentification sur l\textquotesingle utilisateur
+  root.
+\end{enumerate}
+
+\begin{verbatim}
+ssh-keygen -t ed25519 -C "test2@poste" -f ~/.ssh/id_ed25519_test2
+ssh-copy-id -i ~/.ssh/id_ed25519_test2.pub -p 20222 test2@10.202.67.100
+\end{verbatim}
+
+Modifier le fichier de configuration :
+
+\begin{verbatim}
+sudo -i
+nano /etc/ssh/sshd_config
+\end{verbatim}
+
+Ajouter ces directives :
+
+\begin{verbatim}
+PasswordAuthentication no
+PermitRootLogin no
+\end{verbatim}
+
+En bonus, il est possible de désactiver
+l\textquotesingle authentification interactive (+0.5)
+
+\begin{verbatim}
+KbdInteractiveAuthentication no
+\end{verbatim}
+
+\emph{Un bastion ne doit pas permettre la connexion à
+n\textquotesingle importe quelle machine.
+L\textquotesingle administrateur système doit choisir quel groupe
+d\textquotesingle utilisateurs peut accéder à quelle machine.}
+
+\begin{enumerate}
+\setcounter{enumi}{4}
+\tightlist
+\item
+  Limiter l\textquotesingle accès aux machines \texttt{10.202.67.110} et
+  \texttt{10.202.67.111} pour tous les utilisateurs du groupe
+  "grp-rebond" (Créer le groupe si nécessaire)
+\end{enumerate}
+
+Modifier le fichier de configuration :
+
+\begin{verbatim}
+sudo -i
+groupadd grp-rebond
+usermod -aG grp-rebond test2
+\end{verbatim}
+
+\begin{verbatim}
+Match Group grp-rebond
+    AllowTcpForwarding local
+    PermitOpen 10.202.67.110:22 10.202.67.111:22
+\end{verbatim}
+
+Depuis votre hôte, modifier l\textquotesingle alias du bastion :
+
+\begin{verbatim}
+  Host bastion
+      HostName 10.202.67.100
+      Port 20222
+      User test2
+      IdentityFile ~/.ssh/id_ed25519_test2
+\end{verbatim}
+
+Puis :
+
+\begin{verbatim}
+systemctl restart ssh
+\end{verbatim}
+
+Résultat :
+
+\begin{verbatim}
+ssh -J bastion test2@10.202.67.110   # ok
+ssh -J bastion test2@10.202.10.1     # refusé 
+\end{verbatim}
+
+\emph{Le bastion construit durant ce TP repose uniquement sur OpenSSH.
+En production, on utilise généralement une solution dédiée.}
+
+\begin{enumerate}
+\setcounter{enumi}{5}
+\tightlist
+\item
+  Proposer une solution de bastion open source et la justifier selon au
+  moins trois critères choisis judicieusement. Quels sont les apports
+  par rapport à la configuration réalisée dans les questions précédentes
+  ?
+\end{enumerate}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Critère
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+The Bastion (OVH)
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Warpgate
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+JumpServer
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Teleport
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Licence & Apache 2.0 & Apache 2.0 & GPLv3 & Code AGPLv3 (passé sous
+licence commerciale depuis la v16) \\
+Protocoles & SSH, scp/sftp/rsync, telnet, HTTPS &
+\begin{minipage}[t]{\linewidth}\raggedright
+SSH, HTTPS, MySQL, PostgreSQL, RDP,\\
+VNC\strut
+\end{minipage} & SSH,RDP, VNC, bases de données & SSH, Kubernetes, bases
+de données, applis web, RDP \\
+Enregistrement des sessions & Oui & Oui & Oui & Oui \\
+Authentification à multi-facteurs & Oui (TOTP, mot de passe) & Oui
+(TOTP, SSO) & Oui & Oui \\
+Interface & SSH uniquement & Web + SSH & Web & Web et client \\
+Point fort & éprouvé en production par OVHCloud & Léger et codé en Rust
+& Couvre le RDP Windows & Gère tous les accès à
+l\textquotesingle infra \\
+Limites & SSH uniquement & & Plus lourd à déployer & Usage restreint
+(payant) \\
+\end{longtable}
+}
+
+Mon choix personnel se tourne vers WarpGate. Il est distribué sous la
+licence Apache 2.0 qui permet l\textquotesingle audit, la modification
+du code et le déploiement sans restriction particulière. Aussi, il est
+codé en Rust ce qui lui permet d\textquotesingle être résistant aux
+failles liées à la mémoire généralement présentes en C. Chaque session
+est enregistrée comme pour un Bastion commercial comme Wallix ce qui
+permet à l\textquotesingle administrateur d\textquotesingle observer
+dans le détail les opérations effectuées par
+l\textquotesingle utilisateur. De plus, WarpGate gère la MFA (TOTP) et
+le SSO pour faciliter les connexions.
+
+Une limitation existe : le projet est jeune et n\textquotesingle est pas
+autant éprouvé que des solutions comme The Bastion de OVH, il faut donc
+rester prudent, surtout lors d\textquotesingle utilisation en
+production.
+
 
 \end{document}
